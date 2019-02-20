@@ -15,7 +15,7 @@ import sys
 import time
 import socket,sys
 from impacket import ImpactPacket
-import ifaddr
+# import ifaddr
 
 
 
@@ -385,7 +385,7 @@ def ping(source, hostname, timeout=1000, count=3, packet_size=55, *args, **kwarg
 	p = Ping(source, hostname, timeout, packet_size, *args, **kwargs)
 	return p.run(count)
 
-ping(Your IP Address, Destination IP Address)    #put your IP and destination IP address as the ping function argument and run the code. you can ping 
+ping('10.0.0.1', '10.0.0.2')    #put your IP and destination IP address as the ping function argument and run the code. you can ping 
 												 #the destination with your own code!!!
 
 
