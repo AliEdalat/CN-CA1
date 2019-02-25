@@ -1,12 +1,3 @@
-
-"""
-	A pure python ping implementation using raw sockets.
-
-	Note that ICMP messages can only be send from processes running as root
-	
-"""
-
-
 import os
 import select
 import signal
@@ -15,9 +6,7 @@ import sys
 import time
 import socket,sys
 from impacket import ImpactPacket
-# import ifaddr
-
-
+from random import randint
 
 if sys.platform.startswith("win32"):
 	# On Windows, the best timer is time.clock()
@@ -35,6 +24,8 @@ ICMP_MAX_RECV = 2048 # Max size of incoming buffer
 MAX_SLEEP = 1000
 
 
+def readChunks(f):
+	return f.read(512)
 
 def is_valid_ip4_address(addr):
 	parts = addr.split(".")
@@ -71,7 +62,7 @@ class Response(object):
 		self.destination_ip = None
 
 class Ping(object):
-	def __init__(self, source, destination, timeout=1000, packet_size=55, own_id=None, quiet_output=False, udp=False, bind=None):
+	def __init__(self, timeout=1000, packet_size=55, payload=None, pieceNumber = None, own_id=None, quiet_output=False, udp=False, bind=None):
 		self.quiet_output = quiet_output
 		if quiet_output:
 			self.response = Response()
@@ -79,12 +70,14 @@ class Ping(object):
 			self.response.timeout = timeout
 			self.response.packet_size = packet_size
 
-		self.destination = destination
-		self.source = source
+		self.destination = "10.0.0.0"
+		self.source = "10.0.0.0"
 		self.timeout = timeout
 		self.packet_size = packet_size
 		self.udp = udp
 		self.bind = bind
+		self.payload = payload
+		self.pieceNumber = pieceNumber
 
 		if own_id is None:
 			self.own_id = os.getpid() & 0xFFFF
@@ -276,7 +269,8 @@ class Ping(object):
 			return
 		self.send_count += 1
 
-		receive_time, packet_size, ip, ip_header, icmp_header = self.receive_one_ping(current_socket)
+		receive_time, packet_size, ip, ip_header, icmp_header, payload = self.receive_one_ping(current_socket)
+		print(payload)
 		current_socket.close()
 		if receive_time:
 			self.receive_count += 1
@@ -297,6 +291,8 @@ class Ping(object):
 	def send_one_ping(self, current_socket):
 		
 		#Create a new IP packet and set its source and destination IP addresses
+		self.source = "10.0.0."+ str(randint(1,5))
+		self.destination = "10.0.0."+ str(randint(1,5))
 		src = self.source
 		dst = self.destination
 		ip = ImpactPacket.IP()
@@ -309,12 +305,12 @@ class Ping(object):
 
 		#inlude a small payload inside the ICMP packet
 		#and have the ip packet contain the ICMP packet
-		icmp.contains(ImpactPacket.Data("testData"))
+		icmp.contains(ImpactPacket.Data(self.payload))
 		ip.contains(icmp)
 
 
 		#give the ICMP packet some ID
-		icmp.set_icmp_id(0x03)
+		icmp.set_icmp_id(self.pieceNumber)
 		
 		#set the ICMP packet checksum
 		icmp.set_icmp_cksum(0)
@@ -348,7 +344,6 @@ class Ping(object):
 
 
 			packet_data, address = current_socket.recvfrom(ICMP_MAX_RECV)
-
 			icmp_header = self.header2dict(
 				names=[
 					"type", "code", "checksum",
@@ -362,30 +357,31 @@ class Ping(object):
 
 			# if icmp_header["packet_id"] == self.own_id: # Our packet!!!
 			# it should not be our packet!!!Why?
-			if True:
-				ip_header = self.header2dict(
-					names=[
-						"version", "type", "length",
-						"id", "flags", "ttl", "protocol",
-						"checksum", "src_ip", "dest_ip"
-					],
-					struct_format="!BBHHHBBHII",
-					data=packet_data[:20]
-				)
-				packet_size = len(packet_data) - 28
-				ip = socket.inet_ntoa(struct.pack("!I", ip_header["src_ip"]))
-				# XXX: Why not ip = address[0] ???
-				return receive_time, packet_size, ip, ip_header, icmp_header
+			ip_header = self.header2dict(
+				names=[
+					"version", "type", "length",
+					"id", "flags", "ttl", "protocol",
+					"checksum", "src_ip", "dest_ip"
+				],
+				struct_format="!BBHHHBBHII",
+				data=packet_data[:20]
+			)
+			packet_size = len(packet_data) - 28
+			ip = socket.inet_ntoa(struct.pack("!I", ip_header["src_ip"]))
+			# XXX: Why not ip = address[0] ???
+			return receive_time, packet_size, ip, ip_header, icmp_header, packet_data[28:]
 
 			timeout = timeout - select_duration
 			if timeout <= 0:
 				return None, 0, 0, 0, 0
 
-def ping(source, hostname, timeout=1000, count=3, packet_size=55, *args, **kwargs):
-	p = Ping(source, hostname, timeout, packet_size, *args, **kwargs)
-	return p.run(count)
+def ping(timeout=1000, packet_size=55, *args, **kwargs):
+	pieceNumber = 0
+	f = open('file.dat')
+	for piece in iter(readChunks, ''):
+		pieceNumber += 1
+		p = Ping(timeout, packet_size, piece, pieceNumber, *args, **kwargs)
+	return p.run()
 
-ping('10.0.0.1', '10.0.0.2')    #put your IP and destination IP address as the ping function argument and run the code. you can ping 
-												 #the destination with your own code!!!
-
-
+ping()
+# Select for getting input files and run program for other hosts
