@@ -43,12 +43,12 @@ class Ping(object):
 		self.max_time = 0.0
 		self.total_time = 0.0
 
-    def header2dict(self, names, struct_format, data):
+	def header2dict(self, names, struct_format, data):
 
-        unpacked_data = struct.unpack(struct_format, data)
-        return dict(zip(names, unpacked_data))
+        	unpacked_data = struct.unpack(struct_format, data)
+        	return dict(zip(names, unpacked_data))
     
-    def run(self, deadline=None):
+    	def run(self, deadline=None):
 
 		while True:
 			delay = self.do()
@@ -62,7 +62,7 @@ class Ping(object):
 			if (MAX_SLEEP > delay):
 				time.sleep((MAX_SLEEP - delay) / 1000.0)
             
-    def do(self):
+    	def do(self):
 
 		try: 
 			current_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
@@ -94,12 +94,12 @@ class Ping(object):
 				self.max_time = delay
 			return delay
     
-    def send_one_ping(self, current_socket):
+    	def send_one_ping(self, current_socket):
 		
-		self.source = "10.0.0."+ str(randint(1,5))
-		self.destination = "10.0.0."+ str(randint(1,5))
-        print(self.source)
-        print(self.destination)
+		self.source = "10.0.0."+ str(randint(1,4))
+		self.destination = "10.0.0."+ str(randint(1,4))
+        	print(self.source)
+        	print(self.destination)
 		src = self.source
 		dst = self.destination
 		ip = ImpactPacket.IP()
@@ -160,7 +160,7 @@ def ping():
 	pieceNumber = 0
 	for piece in iter(readChunks, ''):
 		pieceNumber += 1
-		p = Ping(timeout, packet_size, piece, pieceNumber, *args, **kwargs)
+		p = Ping(piece, pieceNumber)
 	return p.run()
 
 f = open('file.dat')
