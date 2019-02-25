@@ -15,7 +15,7 @@ class MyTopo( Topo ):
         secondHost = self.addHost( 'h2' )
         thirdHost = self.addHost( 'h3' )
         forthHost = self.addHost( 'h4' )
-        switch = self.addSwitch( 's' )
+        switch = self.addSwitch( 's1' )
 
         # Add links
         self.addLink( firstHost, switch, cls=TCLink, bw=15)
