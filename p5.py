@@ -119,13 +119,14 @@ class Ping(object):
 		ip.set_ip_src(src)
 		ip.set_ip_dst(dst)	
 		icmp = ImpactPacket.ICMP()
-		icmp.set_icmp_type(icmp.ICMP_ECHO)
 		if not self.rec and self.send:
 			icmp.contains(ImpactPacket.Data(self.payload))
+			icmp.set_icmp_type(icmp.ICMP_ECHO)
 		else:
 			print('rec')
 			self.rec = False
 			icmp.contains(ImpactPacket.Data(payload))
+			icmp.set_icmp_type(icmp.ICMP_ECHOREPLY)
 		ip.contains(icmp)
 		icmp.set_icmp_id(self.pieceNumber)
 		icmp.set_icmp_cksum(0)
