@@ -41,6 +41,9 @@ class Ping(object):
 		self.total_time = 0.0
 		self.file = file
 		self.nodeNum = nodeNum
+		self.chunkNum = 0
+		self.returnAll = False
+		self.returnFile = ""
 
 	def header2dict(self, names, struct_format, data):
 
@@ -48,19 +51,6 @@ class Ping(object):
         	return dict(zip(names, unpacked_data))
     
 	def run(self, deadline=None):
-
-		while True:
-			self.do()
-            
-			if deadline and self.total_time >= deadline:
-				break
-
-        
-	def int2ip(self, addr):
-		return socket.inet_ntoa(struct.pack("!I", addr))
-
-	def do(self):
-
 		try: 
 			current_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
 			current_socket.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
@@ -73,26 +63,58 @@ class Ping(object):
 				raise etype, evalue, etb
 			raise
 
+		while True:
+			select_start = default_timer()
+			inputready, outputready, exceptready = select.select([sys.stdin], [], [], 2)
+			select_duration = (default_timer() - select_start)
+			if inputready == []:
+				self.do(current_socket)
+			elif not self.file is None:
+				sin = raw_input()
+				if sin[0:6] == 'return':
+					print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<,,,')
+					self.returnFile = sin[6:]
+            
+			if deadline and self.total_time >= deadline:
+				break
+
+		current_socket.close()
+        
+	def int2ip(self, addr):
+		return socket.inet_ntoa(struct.pack("!I", addr))
+
+	def do(self,current_socket):
+
+		
+
 		receive_time, packet_size, ip, ip_header, icmp_header, payload = self.receive_one_ping(current_socket)
+		print(payload)
 		if (not icmp_header is 0) and (not icmp_header["type"] == ICMP_ECHO):
 			return
 		
 		if (not payload == "") and (not payload is None):
-			print(">>>>>>>>>>>Hello from the payload....!")
-			# print(payload)
-			print("***********")
-			send_time = self.send_one_ping(current_socket, ip_header, payload)
-			if send_time == None:
-				return
-		elif not self.file is None:
-			payload = self.file.read(512)
-			if not payload == "":
-				print("<<<<<<<<<<<<<Hello from the beziiii....!")
+			if not self.returnFile == "":
+				payload = 'return ' + self.returnFile + ' ' + str(self.chunkNum) + '\n'
 				send_time = self.send_one_ping(current_socket, ip_header, payload)
 				if send_time == None:
 					return
+			else:
+				print(">>>>>>>>>>>Hello from the payload....!")
+				# print(payload)
+				print("***********")
+				send_time = self.send_one_ping(current_socket, ip_header, payload)
+				if send_time == None:
+					return
+		elif not self.file is None:
+			payload = self.file.read(512)
+			self.chunkNum+=1;
+			if not payload == "":
+				print("<<<<<<<<<<<<<Hello from the beziiii....!")
+				send_time = self.send_one_ping(current_socket, ip_header, 'file.dat ' + str(self.chunkNum) + '\n' +payload)
+				if send_time == None:
+					return
 		
-		current_socket.close()
+		
     
 	def send_one_ping(self, current_socket, ip_header, payload):
 		firstNode = randint(1,4)
