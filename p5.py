@@ -8,6 +8,7 @@ import socket,sys
 from impacket import ImpactPacket
 from random import randint
 import io
+import StringIO
 
 default_timer = time.time
 
@@ -96,15 +97,18 @@ class Ping(object):
 		if (not icmp_header is 0) and (not icmp_header["type"] == ICMP_ECHO):
 			return
 		if (not payload == "") and (not payload is None):
-			buf = io.StringIO(payload)
-			metadata = buf.readLine()
-			metadata = metadata[:len(metadata)-2]
+			buf = StringIO.StringIO(payload)
+			# buf.write(unicode(payload, "utf-8"))
+			metadata = buf.readline()
+			print(metadata)
+			metadata = metadata[:len(metadata)-1]
 			metadataParts = metadata.split()
+			print(metadataParts)
 			if metadataParts[0] == "return":
 				self.ret = True
 				self.fileToBeReturned = metadataParts[1]
 			elif metadataParts[0] == "finish":
-				if self.file is not None:
+				if not self.file is None:
 					self.fileChunks[int(metadataParts[1])] = "\n".join(payload.split("\n")[1:])
 					self.fileGathered += 1
 				else:
@@ -112,7 +116,7 @@ class Ping(object):
 			elif self.ret is True:
 				if self.fileToBeReturned == metadataParts[0]:
 					payload = "\n".join(payload.split("\n")[1:])
-					payload = "finish\n" + payload
+					payload = "finish " + metadataParts[1] + "\n" + payload
 					send_time = self.send_one_ping(current_socket, ip_header, payload)
 					if send_time == None:
 						return
