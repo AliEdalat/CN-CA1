@@ -42,6 +42,7 @@ class Ping(object):
 		self.min_time = 999999999
 		self.max_time = 0.0
 		self.total_time = 0.0
+		self.rec = False
 
 	def header2dict(self, names, struct_format, data):
 
@@ -61,7 +62,10 @@ class Ping(object):
 
 			if (MAX_SLEEP > delay):
 				time.sleep((MAX_SLEEP - delay) / 1000.0)
-            
+        
+	def int2ip(self, addr):
+		return socket.inet_ntoa(struct.pack("!I", addr))
+
     	def do(self):
 
 		try: 
@@ -76,13 +80,17 @@ class Ping(object):
 				raise etype, evalue, etb
 			raise
 
-		send_time = self.send_one_ping(current_socket)
+		receive_time, packet_size, ip, ip_header, icmp_header, payload = self.receive_one_ping(current_socket)
+		print(payload)
+		print(ip_header)
+		if ip_header:
+			self.rec = True
+		send_time = self.send_one_ping(current_socket, ip_header, payload)
 		if send_time == None:
 			return
 		self.send_count += 1
 
-		receive_time, packet_size, ip, ip_header, icmp_header, payload = self.receive_one_ping(current_socket)
-		print(payload)
+		
 		current_socket.close()
 		if receive_time:
 			self.receive_count += 1
@@ -94,12 +102,16 @@ class Ping(object):
 				self.max_time = delay
 			return delay
     
-    	def send_one_ping(self, current_socket):
-		
-		self.source = "10.0.0."+ str(randint(1,4))
-		self.destination = "10.0.0."+ str(randint(1,4))
-        	print(self.source)
-        	print(self.destination)
+    	def send_one_ping(self, current_socket, ip_header, payload):
+		if self.rec:
+			self.source = self.int2ip(ip_header["dest_ip"])
+			self.destination = self.int2ip(ip_header["src_ip"])
+			# self.rec = False
+		else:
+			self.source = "10.0.0."+ str(randint(1,4))
+			self.destination = "10.0.0."+ str(randint(1,4))
+		print(self.source)
+		print(self.destination)
 		src = self.source
 		dst = self.destination
 		ip = ImpactPacket.IP()
@@ -107,7 +119,12 @@ class Ping(object):
 		ip.set_ip_dst(dst)	
 		icmp = ImpactPacket.ICMP()
 		icmp.set_icmp_type(icmp.ICMP_ECHO)
-		icmp.contains(ImpactPacket.Data(self.payload))
+		if not self.rec:
+			icmp.contains(ImpactPacket.Data(self.payload))
+		else:
+			print('rec')
+			self.rec = False
+			icmp.contains(ImpactPacket.Data(payload))
 		ip.contains(icmp)
 		icmp.set_icmp_id(self.pieceNumber)
 		icmp.set_icmp_cksum(0)
@@ -125,10 +142,10 @@ class Ping(object):
 
 		while True:
 			select_start = default_timer()
-			inputready, outputready, exceptready = select.select([current_socket], [], [], 1000)
+			inputready, outputready, exceptready = select.select([current_socket], [], [], 1)
 			select_duration = (default_timer() - select_start)
 			if inputready == []:
-				return None, 0, 0, 0, 0
+				return None, 0, 0, 0, 0, None
 
 			packet_data, address = current_socket.recvfrom(ICMP_MAX_RECV)
 			icmp_header = self.header2dict(
@@ -151,7 +168,7 @@ class Ping(object):
 			)
 			packet_size = len(packet_data) - 28
 			ip = socket.inet_ntoa(struct.pack("!I", ip_header["src_ip"]))
-			return receive_time, packet_size, ip, ip_header, icmp_header, packet_data
+			return receive_time, packet_size, ip, ip_header, icmp_header, packet_data[28:]
     
 def readChunks():
 	return f.read(512)
