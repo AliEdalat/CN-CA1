@@ -31,7 +31,7 @@ def is_valid_ip4_address(addr):
 
 
 class Ping(object):
-	def __init__(self, payload=None, pieceNumber = None):
+	def __init__(self, send = False ,payload=None, pieceNumber = None):
 
 		self.destination = "10.0.0.0"
 		self.source = "10.0.0.0"
@@ -43,6 +43,7 @@ class Ping(object):
 		self.max_time = 0.0
 		self.total_time = 0.0
 		self.rec = False
+		self.send = send
 
 	def header2dict(self, names, struct_format, data):
 
@@ -119,7 +120,7 @@ class Ping(object):
 		ip.set_ip_dst(dst)	
 		icmp = ImpactPacket.ICMP()
 		icmp.set_icmp_type(icmp.ICMP_ECHO)
-		if not self.rec:
+		if not self.rec and self.send:
 			icmp.contains(ImpactPacket.Data(self.payload))
 		else:
 			print('rec')
@@ -173,12 +174,13 @@ class Ping(object):
 def readChunks():
 	return f.read(512)
 
-def ping():
+def ping(send):
 	pieceNumber = 0
 	for piece in iter(readChunks, ''):
 		pieceNumber += 1
-		p = Ping(piece, pieceNumber)
+		p = Ping(send ,piece, pieceNumber)
 	return p.run()
 
+print (sys.argv)
 f = open('file.dat')
-ping()
+ping(sys.argv[1] == 'True')
