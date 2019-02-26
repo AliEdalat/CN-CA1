@@ -31,43 +31,35 @@ def is_valid_ip4_address(addr):
 
 
 class Ping(object):
-	def __init__(self, send = False ,payload=None, pieceNumber = None):
+	def __init__(self, file=None, nodeNum = 0):
 
 		self.destination = "10.0.0.0"
 		self.source = "10.0.0.0"
-		self.payload = payload
-		self.pieceNumber = pieceNumber
-		self.send_count = 0
 		self.receive_count = 0
 		self.min_time = 999999999
 		self.max_time = 0.0
 		self.total_time = 0.0
-		self.rec = False
-		self.send = send
+		self.file = file
+		self.nodeNum = nodeNum
 
 	def header2dict(self, names, struct_format, data):
 
         	unpacked_data = struct.unpack(struct_format, data)
         	return dict(zip(names, unpacked_data))
     
-    	def run(self, deadline=None):
+	def run(self, deadline=None):
 
 		while True:
-			delay = self.do()
+			self.do()
             
 			if deadline and self.total_time >= deadline:
 				break
 
-			if delay == None:
-				delay = 0
-
-			if (MAX_SLEEP > delay):
-				time.sleep((MAX_SLEEP - delay) / 1000.0)
         
 	def int2ip(self, addr):
 		return socket.inet_ntoa(struct.pack("!I", addr))
 
-    	def do(self):
+	def do(self):
 
 		try: 
 			current_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
@@ -82,35 +74,34 @@ class Ping(object):
 			raise
 
 		receive_time, packet_size, ip, ip_header, icmp_header, payload = self.receive_one_ping(current_socket)
-		print(payload)
-		print(ip_header)
-		if ip_header:
-			self.rec = True
-		send_time = self.send_one_ping(current_socket, ip_header, payload)
-		if send_time == None:
+		if (not icmp_header is 0) and (not icmp_header["type"] == ICMP_ECHO):
 			return
-		self.send_count += 1
-
+		
+		if (not payload == "") and (not payload is None):
+			print(">>>>>>>>>>>Hello from the payload....!")
+			# print(payload)
+			print("***********")
+			send_time = self.send_one_ping(current_socket, ip_header, payload)
+			if send_time == None:
+				return
+		elif not self.file is None:
+			payload = self.file.read(512)
+			if not payload == "":
+				print("<<<<<<<<<<<<<Hello from the beziiii....!")
+				send_time = self.send_one_ping(current_socket, ip_header, payload)
+				if send_time == None:
+					return
 		
 		current_socket.close()
-		if receive_time:
-			self.receive_count += 1
-			delay = (receive_time - send_time) * 1000.0
-			self.total_time += delay
-			if self.min_time > delay:
-				self.min_time = delay
-			if self.max_time < delay:
-				self.max_time = delay
-			return delay
     
-    	def send_one_ping(self, current_socket, ip_header, payload):
-		if self.rec:
-			self.source = self.int2ip(ip_header["dest_ip"])
-			self.destination = self.int2ip(ip_header["src_ip"])
-			# self.rec = False
-		else:
-			self.source = "10.0.0."+ str(randint(1,4))
-			self.destination = "10.0.0."+ str(randint(1,4))
+	def send_one_ping(self, current_socket, ip_header, payload):
+		firstNode = randint(1,4)
+		secondNode = randint(1,4)
+		while(secondNode == self.nodeNum or secondNode == firstNode):
+			firstNode = randint(1,4)
+			secondNode = randint(1,4)
+		self.source = "10.0.0."+ str(firstNode)
+		self.destination = "10.0.0."+ str(secondNode)
 		print(self.source)
 		print(self.destination)
 		src = self.source
@@ -119,16 +110,10 @@ class Ping(object):
 		ip.set_ip_src(src)
 		ip.set_ip_dst(dst)	
 		icmp = ImpactPacket.ICMP()
-		if not self.rec and self.send:
-			icmp.contains(ImpactPacket.Data(self.payload))
-			icmp.set_icmp_type(icmp.ICMP_ECHO)
-		else:
-			print('rec')
-			self.rec = False
-			icmp.contains(ImpactPacket.Data(payload))
-			icmp.set_icmp_type(icmp.ICMP_ECHOREPLY)
+		icmp.contains(ImpactPacket.Data(payload))
+		icmp.set_icmp_type(icmp.ICMP_ECHO)
 		ip.contains(icmp)
-		icmp.set_icmp_id(self.pieceNumber)
+		icmp.set_icmp_id(icmp.get_icmp_id())####
 		icmp.set_icmp_cksum(0)
 		icmp.auto_checksum = 1
 		send_time = default_timer()
@@ -171,17 +156,18 @@ class Ping(object):
 			packet_size = len(packet_data) - 28
 			ip = socket.inet_ntoa(struct.pack("!I", ip_header["src_ip"]))
 			return receive_time, packet_size, ip, ip_header, icmp_header, packet_data[28:]
-    
-def readChunks():
-	return f.read(512)
 
-def ping(send):
-	pieceNumber = 0
-	for piece in iter(readChunks, ''):
-		pieceNumber += 1
-		p = Ping(send ,piece, pieceNumber)
-	return p.run()
+#def ping(send):
+	# if send:
+	# 	pieceNumber = 0
+	# 	for piece in iter(readChunks, ''):
+	# 		pieceNumber += 1
+	# 		p = Ping(piece, pieceNumber)
 
-print (sys.argv)
-f = open('file.dat')
-ping(sys.argv[1] == 'True')
+print(sys.argv)
+if (sys.argv[1] == 'True'):
+	f = open('file.dat')
+	p = Ping(file = f,nodeNum = int(sys.argv[2]))
+else:
+	p = Ping(nodeNum = int(sys.argv[2]))
+p.run()
