@@ -7,6 +7,7 @@ import time
 import socket,sys
 from impacket import ImpactPacket
 from random import randint
+import io
 
 default_timer = time.time
 
@@ -42,8 +43,11 @@ class Ping(object):
 		self.file = file
 		self.nodeNum = nodeNum
 		self.chunkNum = 0
-		self.returnAll = False
 		self.returnFile = ""
+		self.ret = False
+		self.fileToBeReturned = ""
+		self.fileChunks = []
+		self.fileGathered = 0
 
 	def header2dict(self, names, struct_format, data):
 
@@ -71,9 +75,10 @@ class Ping(object):
 				self.do(current_socket)
 			elif not self.file is None:
 				sin = raw_input()
-				if sin[0:6] == 'return':
-					print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<,,,')
-					self.returnFile = sin[6:]
+				inArgs = sin.split()
+				if inArgs[0] == 'return':
+					print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+					self.returnFile = inArgs[1]
             
 			if deadline and self.total_time >= deadline:
 				break
@@ -83,32 +88,51 @@ class Ping(object):
 	def int2ip(self, addr):
 		return socket.inet_ntoa(struct.pack("!I", addr))
 
+# Share multiple files -> buffer for multi files 
+# Collect chunks together
 	def do(self,current_socket):
 
-		
-
 		receive_time, packet_size, ip, ip_header, icmp_header, payload = self.receive_one_ping(current_socket)
-		print(payload)
 		if (not icmp_header is 0) and (not icmp_header["type"] == ICMP_ECHO):
 			return
-		
 		if (not payload == "") and (not payload is None):
-			if not self.returnFile == "":
-				payload = 'return ' + self.returnFile + ' ' + str(self.chunkNum) + '\n'
-				send_time = self.send_one_ping(current_socket, ip_header, payload)
-				if send_time == None:
+			buf = io.StringIO(payload)
+			metadata = buf.readLine()
+			metadata = metadata[:len(metadata)-2]
+			metadataParts = metadata.split()
+			if metadataParts[0] == "return":
+				self.ret = True
+				self.fileToBeReturned = metadataParts[1]
+			elif metadataParts[0] == "finish":
+				if self.file is not None:
+					self.fileChunks[int(metadataParts[1])] = "\n".join(payload.split("\n")[1:])
+					self.fileGathered += 1
+				else:
 					return
-			else:
-				print(">>>>>>>>>>>Hello from the payload....!")
-				# print(payload)
-				print("***********")
-				send_time = self.send_one_ping(current_socket, ip_header, payload)
-				if send_time == None:
-					return
+			elif self.ret is True:
+				if self.fileToBeReturned == metadataParts[0]:
+					payload = "\n".join(payload.split("\n")[1:])
+					payload = "finish\n" + payload
+					send_time = self.send_one_ping(current_socket, ip_header, payload)
+					if send_time == None:
+						return
+			else:	
+				if self.returnFile is not "":
+					self.ret = True
+					payload = 'return ' + self.returnFile + "\n"
+					send_time = self.send_one_ping(current_socket, ip_header, payload)
+					if send_time == None:
+						return
+				else:
+					print(">>>>>>>>>>>Hello from the payload....!")
+					send_time = self.send_one_ping(current_socket, ip_header, payload)
+					if send_time == None:
+						return
 		elif not self.file is None:
 			payload = self.file.read(512)
-			self.chunkNum+=1;
+			self.chunkNum+=1
 			if not payload == "":
+				self.fileChunks.append("")
 				print("<<<<<<<<<<<<<Hello from the beziiii....!")
 				send_time = self.send_one_ping(current_socket, ip_header, 'file.dat ' + str(self.chunkNum) + '\n' +payload)
 				if send_time == None:
@@ -117,15 +141,19 @@ class Ping(object):
 		
     
 	def send_one_ping(self, current_socket, ip_header, payload):
-		firstNode = randint(1,4)
-		secondNode = randint(1,4)
-		while(secondNode == self.nodeNum or secondNode == firstNode):
+		if payload == "finish\n":
+			self.source = "10.0.0." + str(randint(2,4))
+			self.destination = "10.0.0.1"
+		else:
 			firstNode = randint(1,4)
 			secondNode = randint(1,4)
-		self.source = "10.0.0."+ str(firstNode)
-		self.destination = "10.0.0."+ str(secondNode)
-		print(self.source)
-		print(self.destination)
+			while(secondNode == self.nodeNum or secondNode == firstNode):
+				firstNode = randint(1,4)
+				secondNode = randint(1,4)
+			self.source = "10.0.0."+ str(firstNode)
+			self.destination = "10.0.0."+ str(secondNode)
+			print(self.source)
+			print(self.destination)
 		src = self.source
 		dst = self.destination
 		ip = ImpactPacket.IP()
@@ -178,13 +206,6 @@ class Ping(object):
 			packet_size = len(packet_data) - 28
 			ip = socket.inet_ntoa(struct.pack("!I", ip_header["src_ip"]))
 			return receive_time, packet_size, ip, ip_header, icmp_header, packet_data[28:]
-
-#def ping(send):
-	# if send:
-	# 	pieceNumber = 0
-	# 	for piece in iter(readChunks, ''):
-	# 		pieceNumber += 1
-	# 		p = Ping(piece, pieceNumber)
 
 print(sys.argv)
 if (sys.argv[1] == 'True'):
