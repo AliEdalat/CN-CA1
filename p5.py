@@ -43,12 +43,13 @@ class Ping(object):
 		self.total_time = 0.0
 		self.file = file
 		self.nodeNum = nodeNum
-		self.chunkNum = 0
+		self.chunkNum = {}
 		self.returnFile = ""
 		self.ret = False
 		self.fileToBeReturned = ""
 		self.fileChunks = []
 		self.fileGathered = 0
+		self.bezi = 0
 
 	def header2dict(self, names, struct_format, data):
 
@@ -69,17 +70,28 @@ class Ping(object):
 			raise
 
 		while True:
+			print(self.chunkNum)
+			print(self.fileGathered)
+			if self.chunkNum == self.fileGathered and not self.chunkNum == 0:
+				print("fuckkkk2")
+				file_output = ""
+				for x in self.fileChunks:
+					file_output += x
+				print(file_output)
+				return 
 			select_start = default_timer()
 			inputready, outputready, exceptready = select.select([sys.stdin], [], [], 2)
 			select_duration = (default_timer() - select_start)
 			if inputready == []:
 				self.do(current_socket)
+
 			elif not self.file is None:
 				sin = raw_input()
 				inArgs = sin.split()
 				if inArgs[0] == 'return':
 					print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
 					self.returnFile = inArgs[1]
+					self.ret = True
             
 			if deadline and self.total_time >= deadline:
 				break
@@ -90,7 +102,6 @@ class Ping(object):
 		return socket.inet_ntoa(struct.pack("!I", addr))
 
 # Share multiple files -> buffer for multi files 
-# Collect chunks together
 	def do(self,current_socket):
 
 		receive_time, packet_size, ip, ip_header, icmp_header, payload = self.receive_one_ping(current_socket)
@@ -98,7 +109,6 @@ class Ping(object):
 			return
 		if (not payload == "") and (not payload is None):
 			buf = StringIO.StringIO(payload)
-			# buf.write(unicode(payload, "utf-8"))
 			metadata = buf.readline()
 			print(metadata)
 			metadata = metadata[:len(metadata)-1]
@@ -107,35 +117,39 @@ class Ping(object):
 			if metadataParts[0] == "return":
 				self.ret = True
 				self.fileToBeReturned = metadataParts[1]
+				self.bezi = metadataParts[2]
 			elif metadataParts[0] == "finish":
-				if not self.file is None:
-					self.fileChunks[int(metadataParts[1])] = "\n".join(payload.split("\n")[1:])
+				if self.file is not None:
+					self.fileChunks[int(metadataParts[1])-1] = "\n".join(payload.split("\n")[1:])
 					self.fileGathered += 1
-				# else:
-				# 	return
+					print(self.fileGathered)
+					# if fileGathered ==
 			elif self.ret is True:
+				if self.file is not None:
+					self.fileChunks[int(metadataParts[1])-1] = "\n".join(payload.split("\n")[1:])
+					self.fileGathered += 1
+					print(self.fileGathered)
 				if self.fileToBeReturned == metadataParts[0]:
 					payload = "\n".join(payload.split("\n")[1:])
 					payload = "finish " + metadataParts[1] + "\n" + payload
 					send_time = self.send_one_ping(current_socket, ip_header, payload)
 					if send_time == None:
 						return
-			else:	
-				if self.returnFile is not "":
-					self.ret = True
-					payload = 'return ' + self.returnFile + "\n"
-					send_time = self.send_one_ping(current_socket, ip_header, payload)
-					if send_time == None:
-						return
-				else:
-					print(">>>>>>>>>>>Hello from the payload....!")
-					send_time = self.send_one_ping(current_socket, ip_header, payload)
-					if send_time == None:
-						return
+			elif self.returnFile is not "":
+				# print("!!!!!!!!!!")
+				payload = 'return ' + self.returnFile + " " + str(self.nodeNum) + "\n"
+				send_time = self.send_one_ping(current_socket, ip_header, payload)
+				if send_time == None:
+					return
+			else:
+				print(">>>>>>>>>>>Hello from the payload....!")
+				send_time = self.send_one_ping(current_socket, ip_header, payload)
+				if send_time == None:
+					return
 		elif not self.file is None:
 			payload = self.file.read(512)
-			self.chunkNum+=1
 			if not payload == "":
+				self.chunkNum+=1
 				self.fileChunks.append("")
 				print("<<<<<<<<<<<<<Hello from the beziiii....!")
 				send_time = self.send_one_ping(current_socket, ip_header, 'file.dat ' + str(self.chunkNum) + '\n' +payload)
@@ -143,14 +157,14 @@ class Ping(object):
 					return
 		
 		
-    
+    #admin flag
 	def send_one_ping(self, current_socket, ip_header, payload):
 		if payload[0:6] == "finish":
 			firstNode = randint(1,4)
-			while(firstNode == self.nodeNum):
+			while(firstNode == self.bezi):
 				firstNode = randint(1,4)
-			self.source = "10.0.0." + firstNode
-			self.destination = "10.0.0." + str(self.nodeNum)
+			self.source = "10.0.0." + str(firstNode)
+			self.destination = "10.0.0." + str(self.bezi)
 		else:
 			firstNode = randint(1,4)
 			secondNode = randint(1,4)
