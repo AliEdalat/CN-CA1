@@ -33,7 +33,7 @@ def is_valid_ip4_address(addr):
 
 
 class Ping(object):
-	def __init__(self, file=None, nodeNum = 0):
+	def __init__(self, nodeNum = 0, isAdmin = False):
 
 		self.destination = "10.0.0.0"
 		self.source = "10.0.0.0"
@@ -44,18 +44,27 @@ class Ping(object):
 		self.file = file
 		self.nodeNum = nodeNum
 		self.chunkNum = {}
-		self.returnFile = ""
 		self.ret = False
-		self.fileToBeReturned = ""
-		self.fileChunks = []
-		self.fileGathered = 0
+		self.fileChunks = {}
+		self.fileGathered = {}
 		self.bezi = 0
+		self.isAdmin = isAdmin
+		self.shareCompleted = True
+		self.fileName = None
 
 	def header2dict(self, names, struct_format, data):
 
         	unpacked_data = struct.unpack(struct_format, data)
         	return dict(zip(names, unpacked_data))
     
+	def isFinished(self):
+		if bool(self.chunkNum) == False:
+			return False
+		for key ,value in self.chunkNum.items():
+			if (self.fileGathered[key] is not value or self.fileGathered[key] is 0):
+				return False
+		return True
+	
 	def run(self, deadline=None):
 		try: 
 			current_socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
@@ -70,28 +79,34 @@ class Ping(object):
 			raise
 
 		while True:
-			print(self.chunkNum)
-			print(self.fileGathered)
-			if self.chunkNum == self.fileGathered and not self.chunkNum == 0:
-				print("fuckkkk2")
-				file_output = ""
-				for x in self.fileChunks:
-					file_output += x
-				print(file_output)
-				return 
+			print(self.shareCompleted)
+			if self.isFinished():
+				for key ,value in self.fileChunks.items():
+					s = ""
+					for x in value:
+						s += x
+					f = open("Downloaded_"+key,"w+")
+					f.write(s)
+					f.close
+				return
 			select_start = default_timer()
-			inputready, outputready, exceptready = select.select([sys.stdin], [], [], 2)
+			inputready, outputready, exceptready = select.select([sys.stdin], [], [], 3)
 			select_duration = (default_timer() - select_start)
 			if inputready == []:
 				self.do(current_socket)
-
-			elif not self.file is None:
+			elif self.isAdmin and self.shareCompleted:
 				sin = raw_input()
 				inArgs = sin.split()
 				if inArgs[0] == 'return':
 					print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
-					self.returnFile = inArgs[1]
 					self.ret = True
+				elif inArgs[0] == 'share':
+					self.file = open(inArgs[1])
+					self.shareCompleted = False
+					self.chunkNum[inArgs[1]] = 0
+					self.fileChunks[inArgs[1]] = []
+					self.fileGathered[inArgs[1]] = 0
+					self.fileName = inArgs[1]
             
 			if deadline and self.total_time >= deadline:
 				break
@@ -101,7 +116,6 @@ class Ping(object):
 	def int2ip(self, addr):
 		return socket.inet_ntoa(struct.pack("!I", addr))
 
-# Share multiple files -> buffer for multi files 
 	def do(self,current_socket):
 
 		receive_time, packet_size, ip, ip_header, icmp_header, payload = self.receive_one_ping(current_socket)
@@ -116,45 +130,43 @@ class Ping(object):
 			print(metadataParts)
 			if metadataParts[0] == "return":
 				self.ret = True
-				self.fileToBeReturned = metadataParts[1]
-				self.bezi = metadataParts[2]
+				self.bezi = metadataParts[1]
 			elif metadataParts[0] == "finish":
-				if self.file is not None:
-					self.fileChunks[int(metadataParts[1])-1] = "\n".join(payload.split("\n")[1:])
-					self.fileGathered += 1
-					print(self.fileGathered)
-					# if fileGathered ==
+				if self.isAdmin:
+					self.fileChunks[metadataParts[1]][int(metadataParts[2])-1] = "\n".join(payload.split("\n")[1:])
+					self.fileGathered[metadataParts[1]] += 1
+					print(self.fileGathered[metadataParts[1]])
 			elif self.ret is True:
-				if self.file is not None:
-					self.fileChunks[int(metadataParts[1])-1] = "\n".join(payload.split("\n")[1:])
-					self.fileGathered += 1
-					print(self.fileGathered)
-				if self.fileToBeReturned == metadataParts[0]:
-					payload = "\n".join(payload.split("\n")[1:])
-					payload = "finish " + metadataParts[1] + "\n" + payload
+				if self.isAdmin:
+					self.fileChunks[metadataParts[0]][int(metadataParts[1])-1] = "\n".join(payload.split("\n")[1:])
+					self.fileGathered[metadataParts[0]] += 1
+					print(self.fileGathered[metadataParts[0]])
+					payload = 'return ' + str(self.nodeNum) + "\n"
 					send_time = self.send_one_ping(current_socket, ip_header, payload)
 					if send_time == None:
 						return
-			elif self.returnFile is not "":
-				# print("!!!!!!!!!!")
-				payload = 'return ' + self.returnFile + " " + str(self.nodeNum) + "\n"
-				send_time = self.send_one_ping(current_socket, ip_header, payload)
-				if send_time == None:
-					return
+				else:
+					payload = "\n".join(payload.split("\n")[1:])
+					payload = "finish " + metadataParts[0] + " " + metadataParts[1] + "\n" + payload
+					send_time = self.send_one_ping(current_socket, ip_header, payload)
+					if send_time == None:
+						return
 			else:
 				print(">>>>>>>>>>>Hello from the payload....!")
 				send_time = self.send_one_ping(current_socket, ip_header, payload)
 				if send_time == None:
 					return
-		elif not self.file is None:
+		elif self.isAdmin:
 			payload = self.file.read(512)
 			if not payload == "":
-				self.chunkNum+=1
-				self.fileChunks.append("")
+				self.chunkNum[self.fileName] +=1
+				self.fileChunks[self.fileName].append("")
 				print("<<<<<<<<<<<<<Hello from the beziiii....!")
-				send_time = self.send_one_ping(current_socket, ip_header, 'file.dat ' + str(self.chunkNum) + '\n' +payload)
+				send_time = self.send_one_ping(current_socket, ip_header, self.fileName+ " " + str(self.chunkNum[self.fileName]) + '\n' +payload)
 				if send_time == None:
 					return
+			else:
+				self.shareCompleted = True
 		
 		
     #admin flag
@@ -230,8 +242,7 @@ class Ping(object):
 
 print(sys.argv)
 if (sys.argv[1] == 'True'):
-	f = open('file.dat')
-	p = Ping(file = f,nodeNum = int(sys.argv[2]))
+	p = Ping(int(sys.argv[2]),True)
 else:
-	p = Ping(nodeNum = int(sys.argv[2]))
+	p = Ping(int(sys.argv[2]),False)
 p.run()
