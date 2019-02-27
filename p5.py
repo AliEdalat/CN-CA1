@@ -147,7 +147,7 @@ class Ping(object):
 	def send_one_ping(self, current_socket, ip_header, payload):
 		if payload[0:6] == "finish":
 			firstNode = randint(1,4)
-			while(secondNode == self.nodeNum):
+			while(firstNode == self.nodeNum):
 				firstNode = randint(1,4)
 			self.source = "10.0.0." + firstNode
 			self.destination = "10.0.0." + str(self.nodeNum)
