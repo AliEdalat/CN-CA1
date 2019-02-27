@@ -111,8 +111,8 @@ class Ping(object):
 				if not self.file is None:
 					self.fileChunks[int(metadataParts[1])] = "\n".join(payload.split("\n")[1:])
 					self.fileGathered += 1
-				else:
-					return
+				# else:
+				# 	return
 			elif self.ret is True:
 				if self.fileToBeReturned == metadataParts[0]:
 					payload = "\n".join(payload.split("\n")[1:])
@@ -145,9 +145,12 @@ class Ping(object):
 		
     
 	def send_one_ping(self, current_socket, ip_header, payload):
-		if payload == "finish\n":
-			self.source = "10.0.0." + str(randint(2,4))
-			self.destination = "10.0.0.1"
+		if payload[0:6] == "finish":
+			firstNode = randint(1,4)
+			while(secondNode == self.nodeNum):
+				firstNode = randint(1,4)
+			self.source = "10.0.0." + firstNode
+			self.destination = "10.0.0." + str(self.nodeNum)
 		else:
 			firstNode = randint(1,4)
 			secondNode = randint(1,4)
